@@ -18,7 +18,7 @@ Turn an `.exe`, `.msi` or `.ps1` into a tested Intune Win32 app.
 
 Get `PackPilot.exe` from the [latest release](https://github.com/PresWiFi/PackPilot/releases/latest). It's one file, with no install, no admin rights and no .NET needed (Windows 10/11 x64).
 
-Releases aren't code-signed yet, so SmartScreen may warn: click **More info** > **Run anyway**. Each release lists the file's SHA-256.
+Releases aren't code-signed, so SmartScreen may warn: click **More info** > **Run anyway**. Every release is built from this repository by GitHub Actions and lists the file's SHA-256.
 
 Testing needs **Windows Sandbox** (Windows Pro, Enterprise or Education). Turn it on from an admin PowerShell, then restart:
 
@@ -45,16 +45,9 @@ Permissions, output files, Intune settings, limits and building from source are 
 
 PackPilot installs nothing and changes no system settings. Installers you test only run inside Windows Sandbox, which is discarded when it closes. To remove PackPilot, delete `PackPilot.exe` and `%LOCALAPPDATA%\PackPilot`.
 
-## Code signing policy
+## Privacy
 
-Code signing through [SignPath.io](https://about.signpath.io), with a certificate from [SignPath Foundation](https://signpath.org), has been applied for. Until it's approved, releases are unsigned.
-
-- Committers and reviewers: [PresWiFi](https://github.com/PresWiFi)
-- Approvers: [PresWiFi](https://github.com/PresWiFi)
-
-Every release is built from this repository by GitHub Actions.
-
-**Privacy:** this program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. The only connections it makes are ones you start: **Upload to Intune** talks to Microsoft sign-in and Microsoft Graph ([Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement)), and Sandbox tests give the disposable Sandbox network access unless you turn it off.
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. The only connections it makes are ones you start: **Upload to Intune** talks to Microsoft sign-in and Microsoft Graph ([Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement)), and Sandbox tests give the disposable Sandbox network access unless you turn it off.
 
 ## License
 

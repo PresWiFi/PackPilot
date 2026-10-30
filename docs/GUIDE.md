@@ -63,6 +63,7 @@ Needs the .NET 8 SDK (`winget install Microsoft.DotNet.SDK.8`).
 
 The self-checks (`dotnet run --project tests\PackPilot.Tests`) build a real package, decrypt it and compare the bytes, reject a tampered package, and run the full Intune upload against a simulated Graph service. They run on any OS.
 
-**Releases** are built by GitHub Actions on Windows (`.github/workflows/release.yml`): push a tag like `v0.2.0` and it runs the self-checks, builds the exe, signs it through SignPath once that's set up, and publishes the release with notes from `docs/release-notes/<tag>.md`.
+**Releases** are built by GitHub Actions on Windows (`.github/workflows/release.yml`): push a tag like `v0.2.0` and it runs the self-checks, builds the exe, and publishes the release with notes from `docs/release-notes/<tag>.md`.
+The workflow can also sign the exe through SignPath if the `SIGNPATH_*` repo variables and secret are set; without them it skips signing.
 
 **Layout:** `src/PackPilot.Core` (analysis, `.intunewin` build and verify, scripts, Sandbox, report; `Intune/` for sign-in and Graph upload), `src/PackPilot` (the window), `tests/PackPilot.Tests`, `tools/Test-SandboxHost.ps1` (diagnoses Sandbox start-up failures), `test-installers/` (sample installers and scripts to try).
