@@ -8,6 +8,14 @@ A Windows desktop app for Intune Win32 apps. Drop in an `.exe`, `.msi` or `.ps1`
 4. **Uploads it to Intune** (optional): signs in with Microsoft Graph in the cloud you pick (Commercial/GCC, GCC High, DoD, China), creates or updates the Win32 app with the tested settings, uploads the package, and can assign it.
 5. **Gives you the deployment kit**: the exact Intune portal values, a detection script, a ready-to-run upload script (`Deploy-ToIntune.ps1`), and `Report.html` with what was done and the test results.
 
+## Screenshots
+
+| Start | Detection |
+|---|---|
+| ![Start screen: drop an installer](docs/screenshots/start.png) | ![Detection tab with the MSI product code rule](docs/screenshots/detection.png) |
+| **Upload to Intune** | **Report** |
+| ![Upload window: cloud, tenant, app and assignment](docs/screenshots/upload.png) | ![Report.html: verdict, Intune settings and detection steps](docs/screenshots/report.png) |
+
 ## Upload to Intune
 
 Click **Upload to Intune** after building (and ideally testing):
@@ -20,6 +28,8 @@ Click **Upload to Intune** after building (and ideally testing):
 Permissions: delegated `DeviceManagementApps.ReadWrite.All` and `Group.Read.All`, plus an Intune role that can manage apps. By default PackPilot signs in through **Microsoft Graph Command Line Tools** (the same public app `Connect-MgGraph` uses), so there's nothing to register. An admin consents once. To use your own app registration instead, open **Sign-in app (advanced)** and enter its client ID. The registration needs those delegated permissions, "Allow public client flows" turned on, and the redirect URI `http://localhost`.
 
 Tokens stay in memory and are gone when PackPilot closes. Each upload is recorded in `project.json` and the report.
+
+![PackPilot after a passing Sandbox test](docs/screenshots/workspace.png)
 
 ## Download
 

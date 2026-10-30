@@ -7,3 +7,6 @@ dist/
 test-installers/**/*.exe
 test-installers/**/*.msi
 test-output/
+
+# Raw screenshot captures (cropped copies live in docs/screenshots)
+Screenshots/
