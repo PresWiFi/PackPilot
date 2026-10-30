@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>PackPilot</AssemblyName>
+    <RootNamespace>PackPilot</RootNamespace>
+    <Version>0.1.0</Version>
+    <Product>PackPilot</Product>
+    <Description>Build, test and deploy Intune Win32 apps</Description>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>PackPilot.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PackPilot.Core\PackPilot.Core.csproj" />
+    <Resource Include="PackPilot.ico" />
+    <Resource Include="PackPilot.png" />
+  </ItemGroup>
+</Project>

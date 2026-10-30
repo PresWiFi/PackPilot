@@ -1,0 +1,109 @@
+<Window x:Class="PackPilot.UploadWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Upload to Intune" Icon="PackPilot.ico" Width="640" Height="760" MinWidth="560" MinHeight="600"
+        Background="{StaticResource Bg}" FontFamily="Segoe UI" FontSize="13" WindowStartupLocation="CenterOwner">
+  <Grid Margin="18">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <StackPanel>
+        <TextBlock x:Name="Heading" FontSize="18" FontWeight="SemiBold" Text="Upload to Intune"/>
+        <TextBlock x:Name="Warning" Style="{StaticResource Hint}" Foreground="#B45309" Visibility="Collapsed" Margin="0,6,0,0"/>
+
+        <!-- 1. Tenant -->
+        <Border Style="{StaticResource Card}" Margin="0,12,0,12">
+          <StackPanel>
+            <TextBlock Text="1  Tenant" Style="{StaticResource Heading}"/>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <StackPanel Grid.Column="0">
+                <TextBlock Text="Cloud" Style="{StaticResource Label}"/>
+                <ComboBox x:Name="CloudBox" SelectionChanged="OnCloudChanged"/>
+              </StackPanel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Text="Tenant (domain or ID; blank = your account's home tenant)" Style="{StaticResource Label}"/>
+                <TextBox x:Name="TenantBox"/>
+              </StackPanel>
+            </Grid>
+            <TextBlock x:Name="CloudNote" Style="{StaticResource Hint}"/>
+            <Expander Header="Sign-in app (advanced)" Margin="0,8,0,0">
+              <StackPanel>
+                <TextBlock Text="Client ID" Style="{StaticResource Label}"/>
+                <TextBox x:Name="ClientIdBox" Style="{StaticResource Mono}"/>
+                <TextBlock Style="{StaticResource Hint}" Text="Default: Microsoft Graph Command Line Tools (the app Connect-MgGraph uses). An admin has to consent once to DeviceManagementApps.ReadWrite.All and Group.Read.All. To use your own app registration instead, give it those delegated permissions, turn on 'Allow public client flows', and add the redirect URI http://localhost (Mobile and desktop applications)."/>
+              </StackPanel>
+            </Expander>
+            <DockPanel Margin="0,12,0,0">
+              <Button x:Name="SignInButton" DockPanel.Dock="Left" Content="Sign in" Click="OnSignIn" Padding="16,6"/>
+              <TextBlock x:Name="SignInStatus" VerticalAlignment="Center" Margin="12,0,0,0" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Text="Not signed in. A browser window opens for sign-in."/>
+            </DockPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- 2. App -->
+        <Border Style="{StaticResource Card}" x:Name="AppCard" IsEnabled="False">
+          <StackPanel>
+            <TextBlock Text="2  App" Style="{StaticResource Heading}"/>
+            <TextBlock x:Name="AppSummary" Style="{StaticResource Hint}"/>
+            <RadioButton x:Name="CreateNewRadio" Content="Create a new app" IsChecked="True" Margin="0,8,0,0"/>
+            <RadioButton x:Name="UpdateRadio" Content="Update an existing app" Margin="0,6,0,0" IsEnabled="False"/>
+            <ComboBox x:Name="ExistingBox" Margin="22,4,0,0" IsEnabled="{Binding IsChecked, ElementName=UpdateRadio}"/>
+            <TextBlock x:Name="ExistingHint" Style="{StaticResource Hint}" Margin="22,4,0,0"/>
+          </StackPanel>
+        </Border>
+
+        <!-- 3. Assignment -->
+        <Border Style="{StaticResource Card}" x:Name="AssignCard" IsEnabled="False">
+          <StackPanel>
+            <TextBlock Text="3  Assignment (optional)" Style="{StaticResource Heading}"/>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <StackPanel Grid.Column="0">
+                <TextBlock Text="Intent" Style="{StaticResource Label}"/>
+                <ComboBox x:Name="IntentBox" SelectionChanged="OnAssignChanged">
+                  <ComboBoxItem Tag="None" Content="Don't assign" IsSelected="True"/>
+                  <ComboBoxItem Tag="Required" Content="Required (installs automatically)"/>
+                  <ComboBoxItem Tag="Available" Content="Available (Company Portal)"/>
+                  <ComboBoxItem Tag="Uninstall" Content="Uninstall"/>
+                </ComboBox>
+              </StackPanel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Text="To" Style="{StaticResource Label}"/>
+                <ComboBox x:Name="TargetBox" SelectionChanged="OnAssignChanged">
+                  <ComboBoxItem Tag="Group" Content="A group" IsSelected="True"/>
+                  <ComboBoxItem Tag="AllDevices" Content="All devices"/>
+                  <ComboBoxItem Tag="AllUsers" Content="All users"/>
+                </ComboBox>
+              </StackPanel>
+            </Grid>
+            <StackPanel x:Name="GroupPanel">
+              <TextBlock Text="Group (type the start of its name)" Style="{StaticResource Label}"/>
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Search" Click="OnSearchGroups" Margin="6,0,0,0" Padding="12,4"/>
+                <TextBox x:Name="GroupSearchBox" KeyDown="OnGroupSearchKey"/>
+              </DockPanel>
+              <ListBox x:Name="GroupList" Height="110" Margin="0,6,0,0" DisplayMemberPath="DisplayName"/>
+            </StackPanel>
+            <TextBlock x:Name="AssignHint" Style="{StaticResource Hint}" Text="Tip: assign to a small pilot group first."/>
+          </StackPanel>
+        </Border>
+
+        <TextBlock Text="Progress" FontWeight="SemiBold" Margin="0,4,0,4"/>
+        <ProgressBar x:Name="Progress" Height="6" Minimum="0" Maximum="1"/>
+        <TextBox x:Name="LogBox" Height="120" Margin="0,6,0,0" IsReadOnly="True" Style="{StaticResource Mono}" TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+      </StackPanel>
+    </ScrollViewer>
+
+    <DockPanel Grid.Row="1" Margin="0,12,0,0" LastChildFill="False">
+      <Button x:Name="UploadButton" DockPanel.Dock="Left" Style="{StaticResource Primary}" Margin="0" Click="OnUpload" IsEnabled="False">
+        <TextBlock x:Name="UploadButtonText" Text="Upload" Foreground="White" FontWeight="SemiBold"/>
+      </Button>
+      <Button x:Name="OpenPortalButton" DockPanel.Dock="Left" Content="Open in Intune" Click="OnOpenPortal" Margin="8,0,0,0" Visibility="Collapsed"/>
+      <Button x:Name="CloseButton" DockPanel.Dock="Right" Content="Close" Click="OnClose" Padding="16,6"/>
+    </DockPanel>
+  </Grid>
+</Window>

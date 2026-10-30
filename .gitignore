@@ -1,0 +1,9 @@
+bin/
+obj/
+dist/
+*.user
+.vs/
+# Test installers are downloaded by test-installers/Get-TestInstallers.ps1, not committed
+test-installers/**/*.exe
+test-installers/**/*.msi
+test-output/

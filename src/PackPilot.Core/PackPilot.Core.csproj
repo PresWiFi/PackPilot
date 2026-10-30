@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>PackPilot.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Microsoft sign-in (MSAL) for the Intune upload. -->
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.61.3" />
+  </ItemGroup>
+</Project>
