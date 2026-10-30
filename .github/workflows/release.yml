@@ -1,0 +1,123 @@
+# Builds PackPilot.exe on Windows, runs the self-checks, signs it through SignPath (once configured)
+# and publishes it to a GitHub release.
+#
+#   Push a tag:         git tag v0.2.0 && git push origin v0.2.0
+#   Or run it by hand:  Actions > Release > Run workflow (tag, and whether to publish)
+#
+# Signing turns on when these repository settings exist (Settings > Secrets and variables > Actions):
+#   secret   SIGNPATH_API_TOKEN
+#   variable SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG, SIGNPATH_SIGNING_POLICY_SLUG
+#   variable SIGNPATH_ARTIFACT_CONFIGURATION_SLUG (optional; SignPath's default configuration otherwise)
+# Without them the release is built and published unsigned.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v0.2.0'
+        required: true
+      publish:
+        description: 'Publish to the GitHub release (off = build, test and sign only)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # create the release and upload the exe
+  actions: read     # SignPath reads the build artifact and job details
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 360   # signing waits for a manual approval in SignPath
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+      SIGN: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Version from tag
+        shell: pwsh
+        run: |
+          $v = "$env:TAG".TrimStart('v')
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Tag '$env:TAG' is not vX.Y.Z" }
+          "VERSION=$v" >> $env:GITHUB_ENV
+
+      - name: Self-checks
+        run: dotnet run --project tests/PackPilot.Tests -c Release
+
+      - name: Build PackPilot.exe
+        run: >
+          dotnet publish src/PackPilot -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
+          -p:DebugType=none -p:Version=${{ env.VERSION }} -o dist
+
+      - name: Upload unsigned build
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: PackPilot-${{ env.VERSION }}-unsigned
+          path: dist/PackPilot.exe
+          if-no-files-found: error
+
+      - name: Sign with SignPath (waits for approval)
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 18000
+          output-artifact-directory: signed
+
+      - name: Check the signature
+        if: env.SIGN == 'true'
+        shell: pwsh
+        run: |
+          Copy-Item signed/PackPilot.exe dist/PackPilot.exe -Force
+          $s = Get-AuthenticodeSignature dist/PackPilot.exe
+          "Signature: $($s.Status) $($s.SignerCertificate.Subject)"
+          if ($s.Status -ne 'Valid') { throw "The signed exe does not have a valid signature ($($s.Status))." }
+
+      - name: Upload final build
+        uses: actions/upload-artifact@v4
+        with:
+          name: PackPilot-${{ env.VERSION }}${{ env.SIGN == 'true' && '-signed' || '-unsigned' }}-final
+          path: dist/PackPilot.exe
+
+      - name: Publish release
+        if: env.PUBLISH == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false   # "release not found" is an expected answer below
+          $sha = (Get-FileHash dist/PackPilot.exe -Algorithm SHA256).Hash
+          $size = [math]::Round((Get-Item dist/PackPilot.exe).Length / 1MB)
+          $notesFile = "docs/release-notes/$env:TAG.md"
+          $notes = if (Test-Path $notesFile) { Get-Content $notesFile -Raw } else { "PackPilot $env:VERSION." }
+          $signed = if ($env:SIGN -eq 'true') {
+            'The exe is code-signed (certificate by SignPath Foundation). See the [code signing policy](https://github.com/PresWiFi/PackPilot#code-signing-policy).'
+          } else {
+            'This build is not code-signed yet, so SmartScreen may warn on first run: **More info** > **Run anyway**. See the [code signing policy](https://github.com/PresWiFi/PackPilot#code-signing-policy).'
+          }
+          $notes = $notes.TrimEnd() + "`n`n## Download`n``PackPilot.exe``: one self-contained file for Windows 10/11 x64 ($size MB). No install, no admin rights, no .NET needed.`n`nSHA-256: ``$sha```n`n$signed`n"
+          Set-Content release-notes.md $notes -Encoding utf8
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:TAG dist/PackPilot.exe --clobber
+            gh release edit $env:TAG --notes-file release-notes.md
+          } else {
+            gh release create $env:TAG dist/PackPilot.exe --title "PackPilot $env:VERSION" --notes-file release-notes.md
+          }

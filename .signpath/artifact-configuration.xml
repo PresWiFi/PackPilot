@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Artifact configuration for SignPath (paste into the project's artifact configuration in SignPath).
+  The GitHub workflow uploads a zip holding just PackPilot.exe; this signs that exe with Authenticode
+  and refuses anything whose product name is not PackPilot.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="PackPilot.exe" product-name="PackPilot">
+      <authenticode-sign/>
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
