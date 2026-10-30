@@ -37,9 +37,9 @@ jobs:
       PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
       SIGN: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '8.0.x'
 
@@ -59,9 +59,13 @@ jobs:
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
           -p:DebugType=none -p:Version=${{ env.VERSION }} -o dist
 
+      - name: Show file properties
+        shell: pwsh
+        run: (Get-Item dist/PackPilot.exe).VersionInfo | Format-List ProductName, ProductVersion, FileVersion, CompanyName, FileDescription, OriginalFilename
+
       - name: Upload unsigned build
         id: unsigned
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: PackPilot-${{ env.VERSION }}-unsigned
           path: dist/PackPilot.exe
@@ -91,7 +95,7 @@ jobs:
           if ($s.Status -ne 'Valid') { throw "The signed exe does not have a valid signature ($($s.Status))." }
 
       - name: Upload final build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: PackPilot-${{ env.VERSION }}${{ env.SIGN == 'true' && '-signed' || '-unsigned' }}-final
           path: dist/PackPilot.exe
