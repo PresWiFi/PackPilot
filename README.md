@@ -2,7 +2,7 @@
 
 Turn an `.exe`, `.msi` or `.ps1` into a tested Intune Win32 app.
 
-> **Status:** building and Sandbox testing are ready to use. **Upload to Intune is still in testing**: try it with a test tenant or pilot group first, and [open an issue](https://github.com/PresWiFi/PackPilot/issues) if anything goes wrong.
+> **Status:** Intune upload is in testing; use a test tenant or pilot group. Build and Sandbox testing are stable.
 
 ![PackPilot after a passing Sandbox test](docs/screenshots/workspace.png)
 
@@ -16,11 +16,9 @@ Turn an `.exe`, `.msi` or `.ps1` into a tested Intune Win32 app.
 
 ## Download
 
-Get `PackPilot.exe` from the [latest release](https://github.com/PresWiFi/PackPilot/releases/latest). It's one file, with no install, no admin rights and no .NET needed (Windows 10/11 x64).
+`PackPilot.exe` from the [latest release](https://github.com/PresWiFi/PackPilot/releases/latest). Single file, no install, admin or .NET (Windows 10/11 x64). Unsigned: SmartScreen → **More info** > **Run anyway**. SHA-256 is listed on each release.
 
-Releases aren't code-signed, so SmartScreen may warn: click **More info** > **Run anyway**. Every release is built from this repository by GitHub Actions and lists the file's SHA-256.
-
-Testing needs **Windows Sandbox** (Windows Pro, Enterprise or Education). Turn it on from an admin PowerShell, then restart:
+Testing needs **Windows Sandbox** (Pro/Enterprise/Education). Enable from admin PowerShell and restart:
 
 ```powershell
 Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All
@@ -28,27 +26,25 @@ Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM
 
 ## How to use it
 
-1. Drop an installer on the window and check what it filled in.
+1. Drop an installer on the window and check the fields.
 2. **Build.**
-3. **Test in Sandbox.** The test runs by itself; leave the Sandbox window open until PackPilot shows the result.
-4. If the test learned something (like the exact app name for detection), click the red button to rebuild and retest.
-5. **Upload to Intune**, or follow the deployment guide to add it by hand.
+3. **Test in Sandbox.** Leave the Sandbox window open until the result shows.
+4. If the red rebuild button appears, click it (the test found better detection values).
+5. **Upload to Intune**, or add it manually with the deployment guide.
 
 | | |
 |---|---|
 | ![Start screen](docs/screenshots/start.png) | ![Detection tab](docs/screenshots/detection.png) |
 | ![Upload to Intune](docs/screenshots/upload.png) | ![Report](docs/screenshots/report.png) |
 
-Permissions, output files, Intune settings, limits and building from source are in the **[guide](docs/GUIDE.md)**.
+Permissions, outputs, Intune settings, limits and building: **[guide](docs/GUIDE.md)**.
 
-## Your PC
+## System and privacy
 
-PackPilot installs nothing and changes no system settings. Installers you test only run inside Windows Sandbox, which is discarded when it closes. To remove PackPilot, delete `PackPilot.exe` and `%LOCALAPPDATA%\PackPilot`.
+Installs nothing and changes no settings. Test installers run only in Windows Sandbox. To remove, delete `PackPilot.exe` and `%LOCALAPPDATA%\PackPilot`.
 
-## Privacy
-
-This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. The only connections it makes are ones you start: **Upload to Intune** talks to Microsoft sign-in and Microsoft Graph ([Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement)), and Sandbox tests give the disposable Sandbox network access unless you turn it off.
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. Connections it makes: **Upload to Intune** (Microsoft sign-in and Graph, [privacy statement](https://privacy.microsoft.com/privacystatement)) and Sandbox network access (can be turned off).
 
 ## License
 
-MIT, see [LICENSE](LICENSE). PackPilot builds on [SwitchHunt](https://github.com/deadarcher/SwitchHunt); see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+MIT. Builds on [SwitchHunt](https://github.com/deadarcher/SwitchHunt) ([notices](THIRD-PARTY-NOTICES.md)).
