@@ -17,9 +17,12 @@ public class UploadOptions
     public string? ExistingAppId { get; set; }
     public AssignIntent Intent { get; set; }
     public AssignTarget Target { get; set; }
-    public string? GroupId { get; set; }
-    public string? GroupName { get; set; }
+    /// <summary>The groups to assign to when <see cref="Target"/> is <see cref="AssignTarget.Group"/>.</summary>
+    public List<GroupInfo> Groups { get; set; } = new();
 }
+
+/// <summary>What an upload did: the app it created or updated, and what the assignment step actually did.</summary>
+public record UploadResult(string AppId, string Assignment, IReadOnlyList<string> AssignFailures);
 
 /// <summary>A record of one upload, kept in project.json and shown in the report.</summary>
 public class UploadRecord
@@ -222,7 +225,7 @@ public class IntuneUploader
     }
 
     // ── Upload ────────────────────────────────────────────────────────────────
-    public async Task<string> UploadAsync(Project p, UploadOptions opt, Action<string> log, Action<double> progress, CancellationToken ct)
+    public async Task<UploadResult> UploadAsync(Project p, UploadOptions opt, Action<string> log, Action<double> progress, CancellationToken ct)
     {
         if (p.Package == null || !File.Exists(p.PackageFile)) throw new InvalidOperationException("Build the package first.");
         var pkg = ReadPackage(p.PackageFile);
@@ -275,12 +278,8 @@ public class IntuneUploader
         }, ct);
         log("Upload committed.");
 
-        if (opt.Intent != AssignIntent.None)
-        {
-            await AssignAsync(appId, opt, ct);
-            log($"Assigned: {Describe(opt)}.");
-        }
-        return appId;
+        if (opt.Intent == AssignIntent.None) return new UploadResult(appId, Describe(opt), []);
+        return await AssignAsync(appId, opt, log, ct);
     }
 
     public static string Describe(UploadOptions o) => o.Intent == AssignIntent.None ? "not assigned"
@@ -288,23 +287,79 @@ public class IntuneUploader
         {
             AssignTarget.AllDevices => "all devices",
             AssignTarget.AllUsers => "all users",
-            _ => $"group {o.GroupName ?? o.GroupId}",
+            _ => DescribeGroups(o.Groups),
         };
 
-    async Task AssignAsync(string appId, UploadOptions o, CancellationToken ct)
+    static string DescribeGroups(IEnumerable<GroupInfo> groups) => Targets(groups.Select(g => g.DisplayName).ToList(), true);
+
+    static string Targets(List<string> names, bool groups) =>
+        (groups ? (names.Count == 1 ? "group " : "groups ") : "") + string.Join(", ", names);
+
+    static JsonObject TargetFor(AssignTarget t, string? groupId) => t switch
     {
-        JsonObject target = o.Target switch
+        AssignTarget.AllDevices => new JsonObject { ["@odata.type"] = "#microsoft.graph.allDevicesAssignmentTarget" },
+        AssignTarget.AllUsers => new JsonObject { ["@odata.type"] = "#microsoft.graph.allLicensedUsersAssignmentTarget" },
+        _ => new JsonObject { ["@odata.type"] = "#microsoft.graph.groupAssignmentTarget", ["groupId"] = groupId },
+    };
+
+    /// <summary>
+    /// One assignment per target. Targets the app already has (when updating an existing app) are left as they are,
+    /// since Intune allows one assignment per group. A failed target is logged and the rest still go through.
+    /// </summary>
+    async Task<UploadResult> AssignAsync(string appId, UploadOptions o, Action<string> log, CancellationToken ct)
+    {
+        // Existing targets, keyed by group ID, or by target type for all devices / all users.
+        var existing = new HashSet<string>();
+        if (o.ExistingAppId != null)
         {
-            AssignTarget.AllDevices => new JsonObject { ["@odata.type"] = "#microsoft.graph.allDevicesAssignmentTarget" },
-            AssignTarget.AllUsers => new JsonObject { ["@odata.type"] = "#microsoft.graph.allLicensedUsersAssignmentTarget" },
-            _ => new JsonObject { ["@odata.type"] = "#microsoft.graph.groupAssignmentTarget", ["groupId"] = o.GroupId },
-        };
+            var res = await GraphAsync(HttpMethod.Get, $"deviceAppManagement/mobileApps/{appId}/assignments", null, ct);
+            foreach (var a in res?["value"]?.AsArray() ?? new JsonArray())
+            {
+                var t = a?["target"];
+                existing.Add(t?["groupId"]?.GetValue<string>() ?? t?["@odata.type"]?.GetValue<string>() ?? "");
+            }
+        }
+
+        bool isGroup = o.Target == AssignTarget.Group;
+        var targets = isGroup
+            ? o.Groups.Select(g => (Target: TargetFor(o.Target, g.Id), Key: g.Id, Name: g.DisplayName)).ToList()
+            : [(Target: TargetFor(o.Target, null), Key: TargetFor(o.Target, null)["@odata.type"]!.GetValue<string>(),
+                Name: o.Target == AssignTarget.AllDevices ? "all devices" : "all users")];
+
+        var intent = o.Intent.ToString().ToLowerInvariant();
+        List<string> done = [], skipped = [], failed = [];
+        foreach (var (target, key, name) in targets)
+        {
+            var label = Targets([name], isGroup);
+            if (existing.Contains(key)) { log($"Already assigned to {label}; left as is."); skipped.Add(name); continue; }
+            try
+            {
+                await PostAssignmentAsync(appId, intent, target, ct);
+                log($"Assigned as {intent} to {label}.");
+                done.Add(name);
+            }
+            catch (GraphException ex)
+            {
+                log($"Could not assign to {label}: {ex.Message}");
+                failed.Add(name);
+            }
+        }
+
+        var parts = new List<string>();
+        if (done.Count > 0) parts.Add($"{intent} for {Targets(done, isGroup)}");
+        if (skipped.Count > 0) parts.Add($"already assigned to {Targets(skipped, isGroup)}");
+        if (failed.Count > 0) parts.Add($"assignment FAILED for {Targets(failed, isGroup)}");
+        return new UploadResult(appId, string.Join("; ", parts), failed);
+    }
+
+    async Task PostAssignmentAsync(string appId, string intent, JsonObject target, CancellationToken ct)
+    {
         target["deviceAndAppManagementAssignmentFilterId"] = null;
         target["deviceAndAppManagementAssignmentFilterType"] = "none";
         await GraphAsync(HttpMethod.Post, $"deviceAppManagement/mobileApps/{appId}/assignments", new JsonObject
         {
             ["@odata.type"] = "#microsoft.graph.mobileAppAssignment",
-            ["intent"] = o.Intent.ToString().ToLowerInvariant(),
+            ["intent"] = intent,
             ["source"] = "direct",
             ["target"] = target,
             ["settings"] = new JsonObject

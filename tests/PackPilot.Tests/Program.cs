@@ -183,7 +183,8 @@ static async Task FakeGraphUploadTest(Project proj, Action<bool, string> Check)
     var calls = new List<string>();
     var blocks = new Dictionary<string, byte[]>();
     byte[]? blob = null;
-    JsonNode? appBody = null, commitBody = null, assignBody = null, fileBody = null;
+    JsonNode? appBody = null, commitBody = null, fileBody = null;
+    var assignBodies = new List<(string Path, JsonNode Body)>();
     string state = "azureStorageUriRequestPending";
     int polls = 0;
 
@@ -211,7 +212,7 @@ static async Task FakeGraphUploadTest(Project proj, Action<bool, string> Check)
             else if (req.HttpMethod == "GET" && path.EndsWith("/mobileApps")) reply = """{"value":[{"@odata.type":"#microsoft.graph.win32LobApp","id":"old1","displayName":"Contoso Tool","displayVersion":"2.4.0"},{"@odata.type":"#microsoft.graph.webApp","id":"web1","displayName":"Contoso Tool"}]}""";
             else if (req.HttpMethod == "POST" && path.EndsWith("/mobileApps")) { appBody = JsonNode.Parse(body); reply = """{"id":"app1"}"""; code = 201; }
             else if (req.HttpMethod == "POST" && path.EndsWith("/contentVersions")) { reply = """{"id":"1"}"""; code = 201; }
-            else if (req.HttpMethod == "POST" && path.EndsWith("/files")) { fileBody = JsonNode.Parse(body); reply = """{"id":"f1"}"""; code = 201; }
+            else if (req.HttpMethod == "POST" && path.EndsWith("/files")) { fileBody = JsonNode.Parse(body); state = "azureStorageUriRequestPending"; polls = 0; reply = """{"id":"f1"}"""; code = 201; }
             else if (req.HttpMethod == "GET" && path.EndsWith("/files/f1"))
             {
                 if (++polls == 2 && state.EndsWith("Pending")) state = state.Replace("Pending", "Success");
@@ -219,7 +220,15 @@ static async Task FakeGraphUploadTest(Project proj, Action<bool, string> Check)
             }
             else if (req.HttpMethod == "POST" && path.EndsWith("/commit")) { commitBody = JsonNode.Parse(body); state = "commitFilePending"; polls = 0; }
             else if (req.HttpMethod == "PATCH") reply = "";
-            else if (req.HttpMethod == "POST" && path.EndsWith("/assignments")) { assignBody = JsonNode.Parse(body); code = 201; }
+            else if (req.HttpMethod == "GET" && path.EndsWith("/old1/assignments"))
+                reply = """{"value":[{"intent":"available","target":{"@odata.type":"#microsoft.graph.groupAssignmentTarget","groupId":"g1"}}]}""";
+            else if (req.HttpMethod == "POST" && path.EndsWith("/assignments"))
+            {
+                var b = JsonNode.Parse(body)!;
+                assignBodies.Add((path, b));
+                if (b["target"]?["groupId"]?.GetValue<string>() == "bad") { code = 400; reply = """{"error":{"message":"Group not found"}}"""; }
+                else code = 201;
+            }
             else { code = 404; reply = """{"error":{"message":"unexpected"}}"""; }
             ctx.Response.StatusCode = code;
             var bytes = System.Text.Encoding.UTF8.GetBytes(reply);
@@ -235,11 +244,24 @@ static async Task FakeGraphUploadTest(Project proj, Action<bool, string> Check)
 
     var logs = new List<string>();
     IntuneUploader.ChunkSize = 1024 * 1024;   // several blocks for a 3 MB package
-    var id = await up.UploadAsync(proj, new UploadOptions { Intent = AssignIntent.Required, Target = AssignTarget.Group, GroupId = "g1", GroupName = "Pilot" },
+    var result = await up.UploadAsync(proj, new UploadOptions { Intent = AssignIntent.Required, Target = AssignTarget.Group,
+        Groups = [new GroupInfo("g1", "Pilot", null), new GroupInfo("g2", "IT", null)] },
+        logs.Add, _ => { }, CancellationToken.None);
+    var firstCalls = calls.ToList();
+    var firstAssigns = assignBodies.ToList();
+
+    // Update an existing app: g1 is already assigned there (left alone), "bad" fails, g3 still goes through.
+    assignBodies.Clear();
+    var update = await up.UploadAsync(proj, new UploadOptions { ExistingAppId = "old1", Intent = AssignIntent.Required, Target = AssignTarget.Group,
+        Groups = [new GroupInfo("g1", "Pilot", null), new GroupInfo("bad", "Gone", null), new GroupInfo("g3", "Ring 2", null)] },
         logs.Add, _ => { }, CancellationToken.None);
     listener.Stop();
 
-    Check(id == "app1", "upload returns the new app id");
+    Check(result.AppId == "app1", "upload returns the new app id");
+    Check(result.Assignment == "required for groups Pilot, IT" && result.AssignFailures.Count == 0, $"two-group assignment summary ({result.Assignment})");
+    Check(update.AppId == "old1" && update.AssignFailures.SequenceEqual(["Gone"]), "a failed group is reported and does not abort the upload");
+    Check(assignBodies.Select(a => a.Body["target"]!["groupId"]!.GetValue<string>()).SequenceEqual(["bad", "g3"]), "already-assigned group is skipped on update");
+    Check(update.Assignment == "required for group Ring 2; already assigned to group Pilot; assignment FAILED for group Gone", $"update assignment summary ({update.Assignment})");
     var pkg = IntuneUploader.ReadPackage(proj.PackageFile);
     byte[] expected;
     using (var z = System.IO.Compression.ZipFile.OpenRead(proj.PackageFile))
@@ -254,9 +276,10 @@ static async Task FakeGraphUploadTest(Project proj, Action<bool, string> Check)
     var rule = appBody?["detectionRules"]?[0];
     Check(rule?["@odata.type"]?.GetValue<string>() == "#microsoft.graph.win32LobAppPowerShellScriptDetection" && (rule?["scriptContent"]?.GetValue<string>().Length ?? 0) > 100,
           "registry-name detection is uploaded as the tested Detect.ps1");
-    Check(assignBody?["intent"]?.GetValue<string>() == "required" && assignBody?["target"]?["groupId"]?.GetValue<string>() == "g1", "group assignment sent");
-    var order = string.Join(" > ", calls.Where(c => !c.StartsWith("GET")).Select(c => c.Split('/').Last()));
-    Check(order == $"mobileApps > contentVersions > files > {string.Join(" > ", Enumerable.Repeat("blob?block", blocks.Count))} > blob?blocklist > commit > app1 > assignments", $"request order ({order})");
+    Check(firstAssigns.Count == 2 && firstAssigns.All(a => a.Body["intent"]?.GetValue<string>() == "required")
+          && firstAssigns.Select(a => a.Body["target"]!["groupId"]!.GetValue<string>()).SequenceEqual(["g1", "g2"]), "one assignment sent per group");
+    var order = string.Join(" > ", firstCalls.Where(c => !c.StartsWith("GET")).Select(c => c.Split('/').Last()));
+    Check(order == $"mobileApps > contentVersions > files > {string.Join(" > ", Enumerable.Repeat("blob?block", blocks.Count))} > blob?blocklist > commit > app1 > assignments > assignments", $"request order ({order})");
 
     // Each detection method maps to the right Graph rule type.
     var a = proj.App; var keep = (a.Detection, a.ProductCode, a.DetectFilePath, a.DetectMinVersion);
