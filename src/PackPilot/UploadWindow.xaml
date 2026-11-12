@@ -80,12 +80,25 @@
               </StackPanel>
             </Grid>
             <StackPanel x:Name="GroupPanel">
-              <TextBlock Text="Group (type the start of its name)" Style="{StaticResource Label}"/>
+              <TextBlock Text="Groups (type the start of a name and search; add as many as you need)" Style="{StaticResource Label}"/>
               <DockPanel>
                 <Button DockPanel.Dock="Right" Content="Search" Click="OnSearchGroups" Margin="6,0,0,0" Padding="12,4"/>
                 <TextBox x:Name="GroupSearchBox" KeyDown="OnGroupSearchKey"/>
               </DockPanel>
-              <ListBox x:Name="GroupList" Height="110" Margin="0,6,0,0" DisplayMemberPath="DisplayName"/>
+              <Grid Margin="0,6,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="130"/></Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Search results" Style="{StaticResource Hint}" Margin="0,0,0,2"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" x:Name="SelectedGroupsLabel" Text="Selected (0)" Style="{StaticResource Hint}" Margin="0,0,0,2"/>
+                <ListBox Grid.Row="1" Grid.Column="0" x:Name="GroupList" DisplayMemberPath="DisplayName" SelectionMode="Extended"
+                         MouseDoubleClick="OnAddGroups"/>
+                <StackPanel Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Margin="6,0">
+                  <Button Content="Add &#x2192;" Click="OnAddGroups" Padding="10,4"/>
+                  <Button Content="&#x2190; Remove" Click="OnRemoveGroups" Padding="10,4" Margin="0,6,0,0"/>
+                </StackPanel>
+                <ListBox Grid.Row="1" Grid.Column="2" x:Name="SelectedGroupList" DisplayMemberPath="DisplayName" SelectionMode="Extended"
+                         MouseDoubleClick="OnRemoveGroups" KeyDown="OnSelectedGroupsKey"/>
+              </Grid>
             </StackPanel>
             <TextBlock x:Name="AssignHint" Style="{StaticResource Hint}" Text="Tip: assign to a small pilot group first."/>
           </StackPanel>

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,6 +19,7 @@ public partial class UploadWindow : Window
     CancellationTokenSource? _cts;
     string? _portalUrl;
     bool _busy;
+    readonly ObservableCollection<GroupInfo> _selectedGroups = new();
 
     // One signed-in session per app run, reused while cloud, tenant and client stay the same.
     static GraphSession? _lastSession;
@@ -25,6 +27,7 @@ public partial class UploadWindow : Window
     public UploadWindow(Project p, Func<string, string?> getSetting, Action<string, string> setSetting)
     {
         InitializeComponent();
+        SelectedGroupList.ItemsSource = _selectedGroups;
         _p = p;
         _getSetting = getSetting;
         _setSetting = setSetting;
@@ -158,10 +161,30 @@ public partial class UploadWindow : Window
             var groups = await _uploader.SearchGroupsAsync(GroupSearchBox.Text.Trim(), CancellationToken.None);
             GroupList.ItemsSource = groups;
             if (groups.Count == 0) Log($"No groups start with \"{GroupSearchBox.Text.Trim()}\".");
-            else GroupList.SelectedIndex = 0;
         }
         catch (Exception ex) { Log("Group search failed: " + ex.Message); }
     }
+
+    void OnAddGroups(object sender, RoutedEventArgs e)
+    {
+        foreach (var g in GroupList.SelectedItems.OfType<GroupInfo>())
+            if (!_selectedGroups.Any(s => s.Id == g.Id)) _selectedGroups.Add(g);
+        GroupList.UnselectAll();
+        UpdateSelectedGroupsLabel();
+    }
+
+    void OnRemoveGroups(object sender, RoutedEventArgs e)
+    {
+        foreach (var g in SelectedGroupList.SelectedItems.OfType<GroupInfo>().ToList()) _selectedGroups.Remove(g);
+        UpdateSelectedGroupsLabel();
+    }
+
+    void OnSelectedGroupsKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Delete) OnRemoveGroups(sender, e);
+    }
+
+    void UpdateSelectedGroupsLabel() => SelectedGroupsLabel.Text = $"Selected ({_selectedGroups.Count})";
 
     UploadOptions ReadOptions()
     {
@@ -171,7 +194,7 @@ public partial class UploadWindow : Window
             Target = Enum.Parse<AssignTarget>((string)((ComboBoxItem)TargetBox.SelectedItem).Tag),
         };
         if (UpdateRadio.IsChecked == true && ExistingBox.SelectedItem is ComboBoxItem item) o.ExistingAppId = (string)item.Tag;
-        if (o.Intent != AssignIntent.None && o.Target == AssignTarget.Group && GroupList.SelectedItem is GroupInfo g) { o.GroupId = g.Id; o.GroupName = g.DisplayName; }
+        if (o.Intent != AssignIntent.None && o.Target == AssignTarget.Group) o.Groups = _selectedGroups.ToList();
         return o;
     }
 
@@ -180,9 +203,9 @@ public partial class UploadWindow : Window
     {
         if (_uploader == null || _session == null) return;
         var o = ReadOptions();
-        if (o.Intent != AssignIntent.None && o.Target == AssignTarget.Group && o.GroupId == null)
+        if (o.Intent != AssignIntent.None && o.Target == AssignTarget.Group && o.Groups.Count == 0)
         {
-            MessageBox.Show(this, "Search for a group and select it, or choose \"Don't assign\".", "Assignment", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "Search for groups and add them to the selected list, or choose \"Don't assign\".", "Assignment", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         if (o.Intent == AssignIntent.Required && o.Target != AssignTarget.Group &&
@@ -196,25 +219,29 @@ public partial class UploadWindow : Window
         OpenPortalButton.Visibility = Visibility.Collapsed;
         try
         {
-            var appId = await _uploader.UploadAsync(_p, o,
+            var result = await _uploader.UploadAsync(_p, o,
                 msg => Dispatcher.BeginInvoke(() => Log(msg)),
                 frac => Dispatcher.BeginInvoke(() => Progress.Value = frac),
                 _cts.Token);
+            var appId = result.AppId;
             Progress.Value = 1;
             _portalUrl = _session.Cloud.AppPortalUrl(appId);
             _p.Uploads.Add(new UploadRecord
             {
                 At = DateTime.Now, Cloud = _session.Cloud.Name, Tenant = _session.TenantId ?? _session.Tenant, User = _session.UserName ?? "",
-                AppId = appId, UpdatedExisting = o.ExistingAppId != null, Assignment = IntuneUploader.Describe(o),
+                AppId = appId, UpdatedExisting = o.ExistingAppId != null, Assignment = result.Assignment,
                 PortalUrl = _portalUrl, PackageSha256 = _p.Package?.PackageSha256 ?? "",
             });
             _p.Note($"Uploaded to Intune ({_session.Cloud.Name}, tenant {_session.TenantId}, as {_session.UserName}): " +
-                    $"{(o.ExistingAppId != null ? "updated" : "created")} app {appId}; {IntuneUploader.Describe(o)}.");
+                    $"{(o.ExistingAppId != null ? "updated" : "created")} app {appId}; {result.Assignment}.");
             PackageBuilder.Finish(_p);
             Log("Done. Intune can take a few minutes to show the new content as available.");
             if (_portalUrl != null) OpenPortalButton.Visibility = Visibility.Visible;
             UploadButtonText.Text = "Upload again";
             await LoadExistingAsync();
+            if (result.AssignFailures.Count > 0)
+                MessageBox.Show(this, $"The app was uploaded, but it could not be assigned to: {string.Join(", ", result.AssignFailures)}. See the log for details; assign those in the Intune admin center.",
+                    "Assignment incomplete", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch (OperationCanceledException) { Log("Upload cancelled. If the app was already created, it stays in Intune without content; delete it or upload again to it."); }
         catch (Exception ex)

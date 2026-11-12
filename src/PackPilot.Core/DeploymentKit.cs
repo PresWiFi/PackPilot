@@ -93,12 +93,12 @@ public static class DeploymentKit
 
                 Examples:
                   .\Deploy-ToIntune.ps1 -TenantId contoso.onmicrosoft.com -ClientId <app id>
-                  .\Deploy-ToIntune.ps1 -TenantId contoso.onmicrosoft.com -ClientId <app id> -GroupId <Entra group object id> -Intent required
+                  .\Deploy-ToIntune.ps1 -TenantId contoso.onmicrosoft.com -ClientId <app id> -GroupId <group object id>,<another group object id> -Intent required
             #>
             param(
                 [Parameter(Mandatory)][string]$TenantId,
                 [Parameter(Mandatory)][string]$ClientId,
-                [string]$GroupId,
+                [string[]]$GroupId,
                 [ValidateSet('required', 'available', 'uninstall')][string]$Intent = 'available',
                 [string]$PackagePath = (Join-Path $PSScriptRoot '..\Package\{{Path.GetFileName(p.PackageFile)}}')
             )
@@ -129,8 +129,10 @@ public static class DeploymentKit
             Write-Host "Created Win32 app '$($app.displayName)' with id $($app.id)" -ForegroundColor Green
 
             if ($GroupId) {
-                Add-IntuneWin32AppAssignmentGroup -Include -ID $app.id -GroupID $GroupId -Intent $Intent -Notification 'showAll' -Verbose
-                Write-Host "Assigned as $Intent to group $GroupId" -ForegroundColor Green
+                foreach ($g in $GroupId) {
+                    Add-IntuneWin32AppAssignmentGroup -Include -ID $app.id -GroupID $g -Intent $Intent -Notification 'showAll' -Verbose
+                    Write-Host "Assigned as $Intent to group $g" -ForegroundColor Green
+                }
             } else {
                 Write-Host 'Not assigned. Assign it in the Intune admin center, or run again with -GroupId.'
             }
@@ -201,8 +203,8 @@ public static class DeploymentKit
         L("```powershell");
         L("cd \"" + p.DeployDir + "\"");
         L(".\\Deploy-ToIntune.ps1 -TenantId <tenant>.onmicrosoft.com -ClientId <app id>");
-        L("# and assign it to a group in one go:");
-        L(".\\Deploy-ToIntune.ps1 -TenantId <tenant>.onmicrosoft.com -ClientId <app id> -GroupId <group object id> -Intent required");
+        L("# and assign it to one or more groups in one go:");
+        L(".\\Deploy-ToIntune.ps1 -TenantId <tenant>.onmicrosoft.com -ClientId <app id> -GroupId <group object id>,<another group object id> -Intent required");
         L("```");
         L();
         L("## Check it on a pilot device");

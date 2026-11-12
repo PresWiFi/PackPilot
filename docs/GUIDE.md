@@ -7,7 +7,7 @@ Reference details. For the overview, see the [README](../README.md).
 1. Pick the **cloud**: Commercial / GCC, GCC High, DoD, or China (21Vianet). This sets the sign-in and Graph endpoints (`login.microsoftonline.us` + `graph.microsoft.us` for GCC High, `dod-graph.microsoft.us` for DoD).
 2. Optionally enter the **tenant** (`contoso.onmicrosoft.com` or its ID), then **Sign in**. A browser window opens.
 3. If a Win32 app with the same name exists, PackPilot offers to **update** it (new package, same assignments) instead of creating a duplicate.
-4. Optionally **assign** it: Required, Available or Uninstall, to a group, all devices or all users.
+4. Optionally **assign** it: Required, Available or Uninstall, to one or more groups, all devices or all users.
 
 **Permissions:** delegated `DeviceManagementApps.ReadWrite.All` and `Group.Read.All`, plus an Intune role that can manage apps. By default PackPilot signs in through **Microsoft Graph Command Line Tools** (the public app `Connect-MgGraph` uses), so there's nothing to register; an admin consents once. To use your own app registration, open **Sign-in app (advanced)** and enter its client ID. It needs those delegated permissions, "Allow public client flows" on, and the redirect URI `http://localhost`.
 
