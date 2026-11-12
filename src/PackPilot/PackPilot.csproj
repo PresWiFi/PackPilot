@@ -9,7 +9,7 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>PackPilot</AssemblyName>
     <RootNamespace>PackPilot</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Product>PackPilot</Product>
     <Description>Build, test and deploy Intune Win32 apps</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>
